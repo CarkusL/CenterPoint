@@ -1,5 +1,5 @@
-# CenterNet-PonintPillars Pytroch model convert to ONNX
-Welcome to CenterNet! This project is fork from [tianweiy/CenterPoint](https://github.com/tianweiy/CenterPoint). I implement some code to export CenterNet-PonintPillars ONNX model. 
+# CenterPoint-PonintPillars Pytroch model convert to ONNX
+Welcome to CenterPoint! This project is fork from [tianweiy/CenterPoint](https://github.com/tianweiy/CenterPoint). I implement some code to export CenterPoint-PonintPillars ONNX model. 
 
 Center-based 3D Object Detection and Tracking
 
@@ -85,7 +85,7 @@ All results are tested on a Titan RTX GPU with batch size 1.
 
 ## Third-party resources
 
-- [AFDet](https://arxiv.org/abs/2006.12671): another work inspired by CenterNet achieves good performance on KITTI/Waymo dataset. 
+- [AFDet](https://arxiv.org/abs/2006.12671): another work inspired by CenterPoint achieves good performance on KITTI/Waymo dataset. 
 - [mmdetection3d](https://github.com/open-mmlab/mmdetection3d/tree/master/configs/centerpoint): CenterPoint in mmdet framework. 
 
 ## Use CenterPoint
@@ -123,7 +123,7 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
   ```shell
   python tool/simplify_model.py
   ```
-- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. TensorRT doesn't support ScatterND operater. If you want to run centernet-pointpillars by TensorRT, you can run pfe.onnx and rpn.onnx respectively. 
+- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. TensorRT doesn't support ScatterND operater. If you want to run CenterPoint-pointpillars by TensorRT, you can run pfe.onnx and rpn.onnx respectively. 
   ```shell
   python tool/merge_pfe_rpn_model.py
   ```
