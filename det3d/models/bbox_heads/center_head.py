@@ -239,7 +239,7 @@ class CenterHead(nn.Module):
 
         for task in self.tasks:
             ret_dicts.append(task(x))
-
+        self.ret_dicts = ret_dicts
         return ret_dicts
 
     def _sigmoid(self, x):
@@ -454,7 +454,8 @@ class CenterHead(nn.Module):
         for i in range(batch_size):
             box_preds = batch_box_preds[i]
             hm_preds = batch_hm[i]
-
+            
+ 
             scores, labels = torch.max(hm_preds, dim=-1)
 
             score_mask = scores > test_cfg.score_threshold

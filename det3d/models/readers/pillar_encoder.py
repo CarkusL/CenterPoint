@@ -44,7 +44,7 @@ class PFNLayer(nn.Module):
         x = self.norm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1).contiguous()
         torch.backends.cudnn.enabled = True
         x = F.relu(x)
-
+        
         x_max = torch.max(x, dim=1, keepdim=True)[0]
 
         if self.last_vfe:
@@ -65,6 +65,7 @@ class PillarFeatureNet(nn.Module):
         voxel_size=(0.2, 0.2, 4),
         pc_range=(0, -40, -3, 70.4, 40, 1),
         norm_cfg=None,
+        export_onnx = False,
     ):
         """
         Pillar Feature Net.
@@ -76,10 +77,12 @@ class PillarFeatureNet(nn.Module):
         :param voxel_size: (<float>: 3). Size of voxels, only utilize x and y size.
         :param pc_range: (<float>: 6). Point cloud range, only utilize x and y min.
         """
-
+        
         super().__init__()
         self.name = "PillarFeatureNet"
         assert len(num_filters) > 0
+        
+        self.export_onnx = export_onnx
 
         self.num_input = num_input_features
         num_input_features += 5
@@ -111,41 +114,43 @@ class PillarFeatureNet(nn.Module):
         self.y_offset = self.vy / 2 + pc_range[1]
 
     def forward(self, features, num_voxels, coors):
-        device = features.device
+        if not self.export_onnx:
 
-        dtype = features.dtype
+            device = features.device
 
-        # Find distance of x, y, and z from cluster center
-        # features = features[:, :, :self.num_input]
-        points_mean = features[:, :, :3].sum(dim=1, keepdim=True) / num_voxels.type_as(
-            features
-        ).view(-1, 1, 1)
-        f_cluster = features[:, :, :3] - points_mean
+            dtype = features.dtype
 
-        # Find distance of x, y, and z from pillar center
-        # f_center = features[:, :, :2]
-        f_center = torch.zeros_like(features[:, :, :2])
-        f_center[:, :, 0] = features[:, :, 0] - (
-            coors[:, 3].to(dtype).unsqueeze(1) * self.vx + self.x_offset
-        )
-        f_center[:, :, 1] = features[:, :, 1] - (
-            coors[:, 2].to(dtype).unsqueeze(1) * self.vy + self.y_offset
-        )
+            # Find distance of x, y, and z from cluster center
+            # features = features[:, :, :self.num_input]
+            points_mean = features[:, :, :3].sum(dim=1, keepdim=True) / num_voxels.type_as(
+                features
+            ).view(-1, 1, 1)
+            f_cluster = features[:, :, :3] - points_mean
 
-        # Combine together feature decorations
-        features_ls = [features, f_cluster, f_center]
-        if self._with_distance:
-            points_dist = torch.norm(features[:, :, :3], 2, 2, keepdim=True)
-            features_ls.append(points_dist)
-        features = torch.cat(features_ls, dim=-1)
+            # Find distance of x, y, and z from pillar center
+            # f_center = features[:, :, :2]
+            f_center = torch.zeros_like(features[:, :, :2])
+            f_center[:, :, 0] = features[:, :, 0] - (
+                coors[:, 3].to(dtype).unsqueeze(1) * self.vx + self.x_offset
+            )
+            f_center[:, :, 1] = features[:, :, 1] - (
+                coors[:, 2].to(dtype).unsqueeze(1) * self.vy + self.y_offset
+            )
 
-        # The feature decorations were calculated without regard to whether pillar was empty. Need to ensure that
-        # empty pillars remain set to zeros.
-        voxel_count = features.shape[1]
-        mask = get_paddings_indicator(num_voxels, voxel_count, axis=0)
-        mask = torch.unsqueeze(mask, -1).type_as(features)
-        features *= mask
+            # Combine together feature decorations
+            features_ls = [features, f_cluster, f_center]
+            if self._with_distance:
+                points_dist = torch.norm(features[:, :, :3], 2, 2, keepdim=True)
+                features_ls.append(points_dist)
+            features = torch.cat(features_ls, dim=-1)
 
+            # The feature decorations were calculated without regard to whether pillar was empty. Need to ensure that
+            # empty pillars remain set to zeros.
+            voxel_count = features.shape[1]
+            mask = get_paddings_indicator(num_voxels, voxel_count, axis=0)
+            mask = torch.unsqueeze(mask, -1).type_as(features)
+            features *= mask
+        self.features = features
         # Forward pass through PFNLayers
         for pfn in self.pfn_layers:
             features = pfn(features)
@@ -194,7 +199,6 @@ class PointPillarsScatter(nn.Module):
             indices = indices.type(torch.long)
             voxels = voxel_features[batch_mask, :]
             voxels = voxels.t()
-
             # Now scatter the blob back to the canvas.
             canvas[:, indices] = voxels
 
@@ -206,4 +210,5 @@ class PointPillarsScatter(nn.Module):
 
         # Undo the column stacking to final 4-dim tensor
         batch_canvas = batch_canvas.view(batch_size, self.nchannels, self.ny, self.nx)
+        self.batch_canvas = batch_canvas
         return batch_canvas

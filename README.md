@@ -1,4 +1,7 @@
-# Center-based 3D Object Detection and Tracking
+# CenterNet-PonintPillars Pytroch model convert to ONNX
+Welcome to CenterNet! This project is fork from [tianweiy/CenterPoint](https://github.com/tianweiy/CenterPoint). I implement some code to export CenterNet-PonintPillars ONNX model. 
+
+Center-based 3D Object Detection and Tracking
 
 3D Object Detection and Tracking using center points in the bird-eye view.
 
@@ -19,7 +22,6 @@
 
 
 ## NEWS
-
 [2021-01-06] CenterPoint v1.0 is released. Without bells and whistles, we rank first among all Lidar-only methods on Waymo Open Dataset with a single model that runs at 11 FPS. Check out CenterPoint's model zoo for [Waymo](configs/waymo/README.md) and [nuScenes](configs/nusc/README.md). 
 
 [2020-12-11] 3 out of the top 4 entries in the recent NeurIPS 2020 [nuScenes 3D Detection challenge](https://www.nuscenes.org/object-detection?externalData=all&mapData=all&modalities=Any) used CenterPoint. Congratualations to other participants and please stay tuned for more updates on nuScenes and Waymo soon. 
@@ -102,6 +104,59 @@ Then run a demo by ```python tools/demo.py```. If setup corectly, you will see a
 ## Benchmark Evaluation and Training 
 
 Please refer to [GETTING_START](docs/GETTING_START.md) to prepare the data. Then follow the instruction there to reproduce our detection and tracking results. All detection configurations are included in [configs](configs) and we provide the scripts for all tracking experiments in [tracking_scripts](tracking_scripts). 
+
+## Export ONNX
+I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rpn(include RPN and CenterHead). The PointPillarsScatter isn't exported. I use ScatterND node instead of PointPillarsScatter.
+ 
+- Install packages
+  ```shell
+  pip install onnx onnx-simplifier onnxruntime
+  ```
+- step 1. Download the [trained model(latest.pth)](https://drive.google.com/drive/folders/1K_wHrBo6yRSG7H7UUjKI4rPnyEA8HvOp) and nuscenes mini dataset(v1.0-mini.tar)
+- step 2 Prepare dataset. Please refer to [docs/NUSC.md](docs/NUSC.md)
+
+- step 3. Export pfe.onnx and rpn.onnx
+  ```shell
+  python tool/export_pointpillars_onnx.py
+  ```
+- step 4. Use onnx-simplify and scripte to simplify pfe.onnx and rpn.onnx. 
+  ```shell
+  python tool/simplify_model.py
+  ```
+- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. TensorRT doesn't support ScatterND operater. If you want to run centernet-pointpillars by TensorRT, you can run pfe.onnx and rpn.onnx respectively. 
+  ```shell
+  python tool/merge_pfe_rpn_model.py
+  ```
+  All onnx model are saved in [onnx_model](onnx_model).
+  
+  I add an argument(export_onnx) for export onnx model in [config file](configs/nusc/pp/nusc_centerpoint_pp_02voxel_two_pfn_10sweep_demo_export_onnx.py)
+   
+  ```python
+  model = dict(
+    type="PointPillars",
+    pretrained=None,
+    export_onnx=True, # for export onnx model
+    reader=dict(
+        type="PillarFeatureNet",
+        num_filters=[64, 64],
+        num_input_features=5,
+        with_distance=False,
+        voxel_size=(0.2, 0.2, 8),
+        pc_range=(-51.2, -51.2, -5.0, 51.2, 51.2, 3.0),
+        export_onnx=True, # for export onnx model
+    ),
+    backbone=dict(type="PointPillarsScatter", ds_factor=1),
+    neck=dict(
+        type="RPN",
+        layer_nums=[3, 5, 5],
+        ds_layer_strides=[2, 2, 2],
+        ds_num_filters=[64, 128, 256],
+        us_layer_strides=[0.5, 1, 2],
+        us_num_filters=[128, 128, 128],
+        num_input_features=64,
+        logger=logging.getLogger("RPN"),
+    ),
+  ```
 
 
 ## License

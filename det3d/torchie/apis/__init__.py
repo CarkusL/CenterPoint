@@ -1,5 +1,5 @@
 from .env import get_root_logger, init_dist, set_random_seed
-from .train import batch_processor, batch_processor_ensemble, build_optimizer, train_detector
+from .train import batch_processor, batch_processor_ensemble, build_optimizer, train_detector, example_to_device
 
 # from .inference import init_detector, inference_detector, show_result
 
@@ -10,5 +10,6 @@ __all__ = [
     "train_detector",
     "build_optimizer",
     "batch_processor",
+    "example_to_device",
     # 'init_detector', 'inference_detector', 'show_result'
 ]

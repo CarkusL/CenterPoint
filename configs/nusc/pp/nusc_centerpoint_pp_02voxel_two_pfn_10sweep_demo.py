@@ -24,6 +24,7 @@ target_assigner = dict(
 model = dict(
     type="PointPillars",
     pretrained=None,
+    # export_onnx=True,
     reader=dict(
         type="PillarFeatureNet",
         num_filters=[64, 64],
@@ -31,6 +32,7 @@ model = dict(
         with_distance=False,
         voxel_size=(0.2, 0.2, 8),
         pc_range=(-51.2, -51.2, -5.0, 51.2, 51.2, 3.0),
+        # export_onnx=True,
     ),
     backbone=dict(type="PointPillarsScatter", ds_factor=1),
     neck=dict(
@@ -83,12 +85,12 @@ test_cfg = dict(
 # dataset settings
 dataset_type = "NuScenesDataset"
 nsweeps = 10
-data_root = "data/nuScenes"
+data_root = "/home/dean/dataset/nuscenes"
 
 db_sampler = dict(
     type="GT-AUG",
     enable=False,
-    db_info_path="data/nuScenes/dbinfos_train_10sweeps_withvelo.pkl",
+    db_info_path="/home/dean/dataset/nuscenes/dbinfos_train_10sweeps_withvelo.pkl",
     sample_groups=[
         dict(car=2),
         dict(truck=3),
@@ -159,8 +161,8 @@ test_pipeline = [
     dict(type="Reformat"),
 ]
 
-train_anno = "demo/nuScenes/demo_infos.pkl"
-val_anno = "demo/nuScenes/demo_infos.pkl"
+train_anno = "/home/dean/dataset/nuscenes/dbinfos_train_10sweeps_withvelo.pkl"
+val_anno = "/home/dean/dataset/nuscenes/infos_val_10sweeps_withvelo_filter_True.pkl"
 test_anno = None
 
 data = dict(

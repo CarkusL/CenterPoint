@@ -13,10 +13,12 @@ class PointPillars(SingleStageDetector):
         train_cfg=None,
         test_cfg=None,
         pretrained=None,
+        export_onnx = False
     ):
         super(PointPillars, self).__init__(
             reader, backbone, neck, bbox_head, train_cfg, test_cfg, pretrained
         )
+        self.export_onnx = export_onnx
 
     def extract_feat(self, data):
         input_features = self.reader(
@@ -47,7 +49,9 @@ class PointPillars(SingleStageDetector):
 
         x = self.extract_feat(data)
         preds = self.bbox_head(x)
-
+        
+        if self.export_onnx:
+            return preds
         if return_loss:
             return self.bbox_head.loss(example, preds)
         else:

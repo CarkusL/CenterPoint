@@ -290,7 +290,7 @@ def visual(points, gt_anno, det, i, eval_range=35, conf_th=0.5):
     colors = np.minimum(1, dists / eval_range)
     ax.scatter(points[0, :], points[1, :], c=colors, s=0.2)
 
-    boxes_gt = _second_det_to_nusc_box(gt_anno)
+    boxes_gt = _second_det_to_nusc_box(gt_anno) 
     boxes_est = _second_det_to_nusc_box(det)
 
     # Show GT boxes.
