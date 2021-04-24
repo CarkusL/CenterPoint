@@ -158,7 +158,7 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
     ),
   ```
 
-## Centerpoint Pointpillars For TensorRT From ONNX
+## Centerpoint Pointpillars For TensorRT
 see [Readme](./tensorrt/samples/centerpoint)
 
 ## License
