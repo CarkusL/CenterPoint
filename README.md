@@ -1,5 +1,5 @@
-# CenterPoint-PonintPillars Pytroch model convert to ONNX and Tensorrt
-Welcome to CenterPoint! This project is fork from [tianweiy/CenterPoint](https://github.com/tianweiy/CenterPoint). I implement some code to export CenterPoint-PonintPillars ONNX model and deploy the onnx model using Tensorrt.
+# CenterPoint-PonintPillars Pytroch model convert to ONNX and TensorRT
+Welcome to CenterPoint! This project is fork from [tianweiy/CenterPoint](https://github.com/tianweiy/CenterPoint). I implement some code to export CenterPoint-PonintPillars ONNX model and deploy the onnx model using TensorRT.
 
 Center-based 3D Object Detection and Tracking
 
