@@ -4,6 +4,7 @@
 
 1. Generate the onnx model ```pointpillars_trt.onnx```  for tensrorrt.
 ```
+git lfs clone https://github.com/CarkusL/CenterPoint.git
 python tools/merge_pfe_rpn_model.py
 ```
 2. Prepare the tensorrt environment. I use the [nvcr.io/nvidia/tensorrt:21.02-py3](https://docs.nvidia.com/deeplearning/tensorrt/container-release-notes/running.html) image.
