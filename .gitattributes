@@ -4,3 +4,4 @@ tensorrt/data/centerpoint/594.bin filter=lfs diff=lfs merge=lfs -text
 tensorrt/data/centerpoint/idx.bin filter=lfs diff=lfs merge=lfs -text
 tensorrt/data/centerpoint/pillars.bin filter=lfs diff=lfs merge=lfs -text
 tensorrt/data/centerpoint/pointpillars_trt.onnx filter=lfs diff=lfs merge=lfs -text
+tensorrt/data/centerpoint/ filter=lfs diff=lfs merge=lfs -text
