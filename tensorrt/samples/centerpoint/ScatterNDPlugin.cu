@@ -120,7 +120,7 @@ int ScatterNDPlugin::enqueue(int batchSize, const void* const* inputs, void** ou
     int totalElems = mOutputSize[0]*channel_num;
     
     dim3 blockSize(THREAD_NUM);
-    dim3 gridsize(max_index_num/channel_num/blockSize.x);
+    dim3 gridsize(max_index_num/blockSize.x+1);
 
     switch (mDataType)
     {
