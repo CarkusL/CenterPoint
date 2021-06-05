@@ -106,6 +106,7 @@ __global__ void _ScatterNDKernel(const Dtype *updata_input, const int *indicesIn
     if (idx_num >= max_index_num) return;    
     
     int idx_output = indicesInputPtr[idx_num*2+1];
+    if (idx_output < 0) return;
     
     for(int idx=0; idx < channel_num; idx++){
         output[idx_output*channel_num+idx] = updata_input[idx_num*channel_num+idx];
@@ -121,7 +122,8 @@ int ScatterNDPlugin::enqueue(int batchSize, const void* const* inputs, void** ou
     
     dim3 blockSize(THREAD_NUM);
     dim3 gridsize(max_index_num/blockSize.x+1);
-
+     
+    // if you want to inference use fp32, change the DATA_TYPE
     switch (mDataType)
     {
     case nvinfer1::DataType::kFLOAT:
@@ -238,10 +240,6 @@ const char* ScatterNDPlugin::getPluginNamespace() const
 {
     return mNamespace.c_str();
 }
-
-
-
-
 
 ScatterNDSamplePluginCreator::ScatterNDSamplePluginCreator()
 {   

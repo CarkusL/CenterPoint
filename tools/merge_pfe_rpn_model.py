@@ -43,8 +43,14 @@ def make_scatterND(model, rpn_input_shape, indices_shape, pfe_out_maxpool_name, 
     reshape_shape = np.array(rpn_input_shape, dtype=np.int64)
     reshape_tensor = numpy_helper.from_array(reshape_shape, name="pfe_reshape_shape")
     model.graph.initializer.append(reshape_tensor)    
+    
 
-    input_node = onnx.helper.make_tensor_value_info('indices_input', onnx.TensorProto.INT64, indices_shape)
+    if save_for_trt:
+        idx_type = onnx.TensorProto.INT32
+    else:
+        idx_type = onnx.TensorProto.INT64
+
+    input_node = onnx.helper.make_tensor_value_info('indices_input', idx_type, indices_shape)
     model.graph.input.append(input_node)
     
     model.graph.node.append(squeeze_node)

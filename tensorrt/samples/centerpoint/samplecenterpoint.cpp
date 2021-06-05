@@ -37,7 +37,7 @@
 #include <iostream>
 #include <sstream>
 #include <sys/time.h>
-
+#include <chrono>
 
 const std::string gSampleName = "TensorRT.sample_onnx_centerpoint";
 
@@ -216,9 +216,11 @@ bool SampleOnnxMNIST::infer()
     {
         return false;
     }
-    
-    for(int idx=0; idx < 1; idx++){
-        int64_t startTime = getCurrentTime();
+    double totalDuration = 0;
+    int runTimes = 100;
+    for(int idx=0; idx < runTimes; idx++){
+        auto startTime = std::chrono::high_resolution_clock::now();
+
         // Memcpy from host input buffers to device input buffers
         buffers.copyInputToDevice();
 
@@ -230,11 +232,13 @@ bool SampleOnnxMNIST::infer()
         
         // Memcpy from device output buffers to host output buffers
         buffers.copyOutputToHost();
-        int64_t endTime = getCurrentTime();
-
-        std::cout << "Inference Time: " << endTime - startTime << " ms"<< std::endl;
+        auto endTime = std::chrono::high_resolution_clock::now();
+        double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
+        totalDuration += duration;
+        std::cout << "Inference Time: " << duration << " ms"<< std::endl;
     }
-  
+    std::cout << "Average Inference Time: " << totalDuration / runTimes << " ms"<< std::endl;
+    
     verifyOutput(buffers);
 
 
@@ -262,6 +266,27 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
      
 }
 
+
+bool readBinFile(std::string filename, void* bufPtr)
+{
+    // open the file:
+    std::streampos fileSize;
+    std::ifstream file(filename, std::ios::binary);
+    
+    if (!file) {
+        std::cout << "[Error] open file " << filename << " failed" << std::endl;
+        return false;
+    }
+    // get its size:
+    file.seekg(0, std::ios::end);
+    fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    // read the data:
+    file.read((char*) bufPtr, fileSize);
+    file.close();
+    return true;
+}
 //!
 //! \brief Reads the input and stores the result in a managed buffer
 //!
@@ -271,10 +296,19 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
     float* hostPillars = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     int32_t* hostIndex = static_cast<int32_t*>(buffers.getHostBuffer(mParams.inputTensorNames[1]));
 
-    readBinFile("../"+mParams.dataDirs[0]+"pillars.bin", static_cast<void*>(hostPillars));
-    readBinFile("../"+mParams.dataDirs[0]+"idx.bin", static_cast<void*>(hostIndex));
-    
-    return true;
+    bool ret = readBinFile("../"+mParams.dataDirs[0]+"pillars.bin", static_cast<void*>(hostPillars));
+    if(!ret){
+        std::cout << "[Error] open input file failed" << std::endl;
+        return ret;
+    }
+
+    ret = readBinFile("../"+mParams.dataDirs[0]+"idx.bin", static_cast<void*>(hostIndex));
+    if(!ret){
+        std::cout << "[Error] open input file failed" << std::endl;
+        return ret;
+    }
+
+    return ret;
 }
 
 
