@@ -2,7 +2,6 @@
 **build**
 **egg-info**
 **dist**
-data/
 *.pyc
 venv/
 *.idea/
@@ -12,5 +11,4 @@ venv/
 *.pth
 *.pkl
 *.zip
-*.bin
 .vscode/
