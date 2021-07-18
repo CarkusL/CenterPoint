@@ -161,6 +161,12 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
 ## Centerpoint Pointpillars For TensorRT
 see [Readme](./tensorrt/samples/centerpoint)
 
+Compare the [TensorRT result](./demo/trt_demo/file00.png) with [Pytorch result](./demo/torch_demo/file00.png).
+
+|  TensoRT  | Pytroch  |
+|  :----:  | :----:  |
+| ![avatar](./demo/trt_demo/file00.png)  | ![avatar](./demo/torch_demo/file00.png) |
+
 ## License
 
 CenterPoint is release under MIT license (see [LICENSE](LICENSE)). It is developed based on a forked version of [det3d](https://github.com/poodarchu/Det3D/tree/56402d4761a5b73acd23080f537599b0888cce07). We also incorperate a large amount of code from [CenterNet](https://github.com/xingyizhou/CenterNet)
