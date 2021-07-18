@@ -39,6 +39,8 @@
 #include <sys/time.h>
 #include <chrono>
 
+#include "preprocess.h"
+
 const std::string gSampleName = "TensorRT.sample_onnx_centerpoint";
 
 int64_t getCurrentTime()
@@ -49,13 +51,13 @@ int64_t getCurrentTime()
 }    
 
 
-class SampleOnnxMNIST
+class SampleCenterPoint
 {
     template <typename T>
     using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
 
 public:
-    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params)
+    SampleCenterPoint(const samplesCommon::OnnxSampleParams& params)
         : mParams(params)
         , mEngine(nullptr)
     {
@@ -90,12 +92,13 @@ private:
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
     //!
-    bool processInput(const samplesCommon::BufferManager& buffers);
+    bool processInput(void*& points, std::string& pointFilePath, int& pointNum);
 
     //!
     //! \brief Classifies digits and verify result
     //!
-    bool verifyOutput(const samplesCommon::BufferManager& buffers);
+    void saveOutput(const samplesCommon::BufferManager& buffers);
+    bool testFun(const samplesCommon::BufferManager& buffers);
 };
 
 //!
@@ -106,7 +109,7 @@ private:
 //!
 //! \return Returns true if the engine was created successfully and false otherwise
 //!
-bool SampleOnnxMNIST::build()
+bool SampleCenterPoint::build()
 {
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
@@ -170,7 +173,7 @@ bool SampleOnnxMNIST::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
+bool SampleCenterPoint::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
     SampleUniquePtr<nvonnxparser::IParser>& parser)
 {   
@@ -181,25 +184,33 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
         return false;
     }
 
-    config->setMaxWorkspaceSize(16_MiB);
+    config->setMaxWorkspaceSize(1_GiB);
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
     }
 
-
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
 
     return true;
 }
+bool SampleCenterPoint::testFun(const samplesCommon::BufferManager& buffers){
+    
+    size_t num = 38;
+    for (size_t idx = 0; idx < num; idx++){
+        sample::gLogInfo << "idx:" << idx << std::endl;
+        sample::gLogInfo << "num:" << num << std::endl;
+        sample::gLogInfo << "compare :" << (num>idx) << std::endl;
+    }
 
+}
 //!
 //! \brief Runs the TensorRT inference engine for this sample
 //!
 //! \details This function is the main execution function of the sample. It allocates the buffer,
 //!          sets inputs and executes the engine.
 //!
-bool SampleOnnxMNIST::infer()
+bool SampleCenterPoint::infer()
 {
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
@@ -212,102 +223,108 @@ bool SampleOnnxMNIST::infer()
 
     // Read the input data into the managed buffers
     // assert(mParams.inputTensorNames.size() == 2);
-    if (!processInput(buffers))
+
+
+    float* hostPillars = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
+    int32_t* hostIndex = static_cast<int32_t*>(buffers.getHostBuffer(mParams.inputTensorNames[1]));    
+    
+    void* inputPointBuf = nullptr;
+
+    std::string pointFilePath("../"+mParams.dataDirs[0]+"points.bin");
+    int pointNum = 0;
+    
+    if (!processInput(inputPointBuf, pointFilePath, pointNum))
     {
         return false;
     }
-    double totalDuration = 0;
-    int runTimes = 100;
-    for(int idx=0; idx < runTimes; idx++){
-        auto startTime = std::chrono::high_resolution_clock::now();
+    
+    float* points = static_cast<float*>(inputPointBuf);
+    
+    double totalPreprocessDuration = 0;
+    double totalInferenceDuration = 0;
 
+    int runTimes = 10;
+
+    for(int idx=0; idx < runTimes; idx++){
+        sample::gLogInfo << "----Run Times: "<< idx <<  " -------"<< std::endl; 
+        auto startTime = std::chrono::high_resolution_clock::now();
+        preprocess(points, hostPillars, hostIndex, pointNum);
+        auto endTime = std::chrono::high_resolution_clock::now();
+        double preprocessDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
+        totalPreprocessDuration += preprocessDuration;
+
+        startTime = std::chrono::high_resolution_clock::now();
         // Memcpy from host input buffers to device input buffers
         buffers.copyInputToDevice();
-
+        
         bool status = context->executeV2(buffers.getDeviceBindings().data());
         if (!status)
         {
             return false;
         }
-        
+  
         // Memcpy from device output buffers to host output buffers
         buffers.copyOutputToHost();
-        auto endTime = std::chrono::high_resolution_clock::now();
-        double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
-        totalDuration += duration;
-        std::cout << "Inference Time: " << duration << " ms"<< std::endl;
+        endTime = std::chrono::high_resolution_clock::now();
+        
+        double inferenceDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
+        totalInferenceDuration += inferenceDuration;
+        sample::gLogInfo << "PreProcess Time: " << preprocessDuration << " ms"<< std::endl;
+        sample::gLogInfo << "inferenceDuration Time: " << inferenceDuration << " ms"<< std::endl;
+
     }
-    std::cout << "Average Inference Time: " << totalDuration / runTimes << " ms"<< std::endl;
+    sample::gLogInfo << "Average PreProcess Time: " << totalPreprocessDuration / runTimes << " ms"<< std::endl;
+    sample::gLogInfo << "Average Inference Time: " << totalInferenceDuration / runTimes << " ms"<< std::endl;
     
-    verifyOutput(buffers);
-
-
+    saveOutput(buffers);
+    free(points);  
     return true;
 }
 
-bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
+/* There is a bug. 
+ * If I change void to bool, the "for (size_t idx = 0; idx < mEngine->getNbBindings(); idx++)" loop will not stop.
+ */
+void SampleCenterPoint::saveOutput(const samplesCommon::BufferManager& buffers)
 {
-    const int outputSizeN= mOutputDims.d[0];
-    const int outputSizeC= mOutputDims.d[1];
-    const int outputSizeH= mOutputDims.d[2];
-    const int outputSizeW= mOutputDims.d[3];
+    for (size_t idx = 0; idx < mEngine->getNbBindings(); idx++){
 
-    float* output = static_cast<float*>(buffers.getHostBuffer("594"));
-    
-    //Save one out node
-    fstream file("../"+mParams.dataDirs[0]+"594.bin", ios::out | ios::binary);
-    if (!file)
-    {
-        cout << "Error opening file.";
-        return false;
+        if(mEngine->bindingIsInput(idx)){
+            continue;
+        }
+        auto tensorName = mEngine->getBindingName(idx);
+        auto outputSizeN= mEngine->getBindingDimensions(idx).d[0];
+        auto outputSizeC= mEngine->getBindingDimensions(idx).d[1];
+        auto outputSizeH= mEngine->getBindingDimensions(idx).d[2];
+        auto outputSizeW= mEngine->getBindingDimensions(idx).d[3];
+   
+        float* output = static_cast<float*>(buffers.getHostBuffer(tensorName));
+
+        fstream file("../"+mParams.dataDirs[0]+ tensorName, ios::out | ios::binary);
+        if (!file)
+        {
+            sample::gLogError << "Error opening file." << "../"+mParams.dataDirs[0]+ tensorName << std::endl;;
+            return;
+        }
+        file.write(reinterpret_cast<char *>(output), outputSizeN*outputSizeC*outputSizeH*outputSizeW*sizeof(float));
+        file.close ();
+
     }
-    file.write(reinterpret_cast<char *>(output), outputSizeN*outputSizeC*outputSizeH*outputSizeW*sizeof(float));
-    file.close ();
-     
 }
 
 
-bool readBinFile(std::string filename, void* bufPtr)
-{
-    // open the file:
-    std::streampos fileSize;
-    std::ifstream file(filename, std::ios::binary);
-    
-    if (!file) {
-        std::cout << "[Error] open file " << filename << " failed" << std::endl;
-        return false;
-    }
-    // get its size:
-    file.seekg(0, std::ios::end);
-    fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
-    
-    // read the data:
-    file.read((char*) bufPtr, fileSize);
-    file.close();
-    return true;
-}
 //!
 //! \brief Reads the input and stores the result in a managed buffer
 //!
-bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
+bool SampleCenterPoint::processInput(void*& inputPointBuf, std::string& pointFilePath, int& pointNum)
 {
 
-    float* hostPillars = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
-    int32_t* hostIndex = static_cast<int32_t*>(buffers.getHostBuffer(mParams.inputTensorNames[1]));
-
-    bool ret = readBinFile("../"+mParams.dataDirs[0]+"pillars.bin", static_cast<void*>(hostPillars));
+    bool ret = readBinFile(pointFilePath, inputPointBuf, pointNum);
     if(!ret){
-        std::cout << "[Error] open input file failed" << std::endl;
+        sample::gLogError << "Error read point file: " << pointFilePath<< std::endl;
+        free(inputPointBuf);
         return ret;
-    }
 
-    ret = readBinFile("../"+mParams.dataDirs[0]+"idx.bin", static_cast<void*>(hostIndex));
-    if(!ret){
-        std::cout << "[Error] open input file failed" << std::endl;
-        return ret;
     }
-
     return ret;
 }
 
@@ -371,7 +388,7 @@ int main(int argc, char** argv)
 
     sample::gLogger.reportTestStart(sampleTest);
 
-    SampleOnnxMNIST sample(initializeSampleParams(args));
+    SampleCenterPoint sample(initializeSampleParams(args));
 
     sample::gLogInfo << "Building and running a GPU inference engine for CenterPoint" << std::endl;
 

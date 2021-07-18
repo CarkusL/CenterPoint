@@ -281,7 +281,7 @@ class Box:
         return copy.deepcopy(self)
 
 
-def visual(points, gt_anno, det, i, eval_range=35, conf_th=0.5):
+def visual(points, gt_anno, det, i, eval_range=35, conf_th=0.5, save_path="demo"):
     _, ax = plt.subplots(1, 1, figsize=(9, 9), dpi=200)
     points = remove_close(points, radius=3)
     points = view_points(points[:3, :], np.eye(4), normalize=False)
@@ -307,8 +307,8 @@ def visual(points, gt_anno, det, i, eval_range=35, conf_th=0.5):
     ax.set_xlim(-axes_limit, axes_limit)
     ax.set_ylim(-axes_limit, axes_limit)
     plt.axis('off')
-
-    plt.savefig("demo/file%02d.png" % i)
+    
+    plt.savefig(save_path+"/file%02d.png" % i)
     plt.close()
 
 
