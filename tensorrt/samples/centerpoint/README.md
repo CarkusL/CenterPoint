@@ -87,7 +87,7 @@ python tools/merge_pfe_rpn_model.py
 	[07/18/2021-03:02:04] [I] Average PreProcess Time: 8.05037 ms
 	[07/18/2021-03:02:04] [I] Average Inference Time: 7.04592 ms
 	&&&& PASSED TensorRT.sample_onnx_centerpoint # ./centerpoint
-8. copy the \<TensorRT root directory>/data/centerpoint back the CenterPoint/tensorrt/data
+8. Copy the \<TensorRT root directory>/data/centerpoint back the CenterPoint/tensorrt/data
 9. Run the ```TensorRT_Visualize.ipynb``` to visualiza tensorrt result.
 10. Compare the [TensorRT result](../../../demo/trt_demo/file00.png) with [Pytorch result](../../../demo/torch_demo/file00.png).
 
