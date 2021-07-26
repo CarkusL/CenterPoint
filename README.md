@@ -123,7 +123,7 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
   ```shell
   python tool/simplify_model.py
   ```
-- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. TensorRT doesn't support ScatterND operater. If you want to run CenterPoint-pointpillars by TensorRT, you can run pfe.onnx and rpn.onnx respectively. 
+- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. 
   ```shell
   python tool/merge_pfe_rpn_model.py
   ```
