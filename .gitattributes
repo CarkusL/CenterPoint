@@ -42,3 +42,4 @@ tensorrt/data/centerpoint/674 filter=lfs diff=lfs merge=lfs -text
 tensorrt/data/centerpoint/682 filter=lfs diff=lfs merge=lfs -text
 tensorrt/data/centerpoint/690 filter=lfs diff=lfs merge=lfs -text
 tensorrt/data/centerpoint/698 filter=lfs diff=lfs merge=lfs -text
+tensorrt/data/centerpoint/points/0a0d6b8c2e884134a3b48df43d54c36a.bin filter=lfs diff=lfs merge=lfs -text
