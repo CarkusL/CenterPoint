@@ -46,7 +46,12 @@ class PointPillars(nn.Module):
     def forward(self, x):
         x = self.model.neck(x)
         preds = self.model.bbox_head(x)
-        
+        for task in range(len(preds)):
+            hm_preds = torch.sigmoid(preds[task]['hm'])
+            preds[task]['dim'] = torch.exp(preds[task]['dim'])
+            scores, labels = torch.max(hm_preds, dim=1)
+            preds[task]["hm"] = (scores, labels)
+
         return preds
 
 
@@ -100,7 +105,7 @@ def main():
         
         rpn_input  = torch.zeros((1,64,512,512),dtype=torch.float32,device=gpu_device)
         torch.onnx.export(pp_model, rpn_input,"onnx_model/rpn.onnx",opset_version=11)
-
+    print("Done")
 
 
 if __name__ == "__main__":

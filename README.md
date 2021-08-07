@@ -123,7 +123,7 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
   ```shell
   python tool/simplify_model.py
   ```
-- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. 
+- step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. TensorRT doesn't support ScatterND operater. If you want to run CenterPoint-pointpillars by TensorRT, you can run pfe.onnx and rpn.onnx respectively. 
   ```shell
   python tool/merge_pfe_rpn_model.py
   ```
@@ -166,6 +166,12 @@ Compare the [TensorRT result](./demo/trt_demo/file00.png) with [Pytorch result](
 |  TensoRT  | Pytroch  |
 |  :----:  | :----:  |
 | ![avatar](./demo/trt_demo/file00.png)  | ![avatar](./demo/torch_demo/file00.png) |
+
+#### 3D detection on nuScenes Mini dataset
+|         |  mAP    | mATE   | mASE   | mAOE    | mAVE   |  mAAE | NDS    |
+|---------|---------|--------|--------|---------|--------|-------|------- |
+| Pytorch | 0.4163  | 0.4438 | 0.4516 | 0.5674  | 0.4429 | 0.3288| 0.4847 |
+| TensorRT| 0.4007  | 0.4433 | 0.4537 | 0.5665  | 0.4416 | 0.3191| 0.4779 |
 
 ## License
 

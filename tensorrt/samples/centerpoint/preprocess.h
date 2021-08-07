@@ -2,6 +2,7 @@
 #define __CENTERPOINT_PREPROCESS__
 #include <iostream>
 #include <fstream>
+#include "config.h"
 
 void preprocess(float* points, float* feature, int* indices, int pointNum);
 

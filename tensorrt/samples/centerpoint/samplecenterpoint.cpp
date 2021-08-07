@@ -38,8 +38,11 @@
 #include <sstream>
 #include <sys/time.h>
 #include <chrono>
+#include <glob.h>
+#include <sstream>
 
 #include "preprocess.h"
+#include "postprocess.h"
 
 const std::string gSampleName = "TensorRT.sample_onnx_centerpoint";
 
@@ -49,6 +52,26 @@ int64_t getCurrentTime()
     gettimeofday(&tv, NULL);   
     return tv.tv_sec * 1000 + tv.tv_usec / 1000;    
 }    
+
+
+std::vector<std::string> glob(const std::string pattern)
+{
+    std::vector<std::string> filenames;
+    using namespace std;
+    glob_t glob_result;
+    memset(&glob_result, 0, sizeof(glob_result));
+    int return_value = glob(pattern.c_str(), GLOB_TILDE, NULL, &glob_result);
+    if(return_value != 0){
+        globfree(&glob_result);
+        return filenames;
+    }
+    for(auto idx =0; idx <glob_result.gl_pathc; idx++){
+        filenames.push_back(string(glob_result.gl_pathv[idx]));
+
+    }
+    globfree(&glob_result);
+    return filenames;
+}
 
 
 class SampleCenterPoint
@@ -97,7 +120,7 @@ private:
     //!
     //! \brief Classifies digits and verify result
     //!
-    void saveOutput(const samplesCommon::BufferManager& buffers);
+    void saveOutput(std::vector<Box>& predResult, std::string& inputFileName);
     bool testFun(const samplesCommon::BufferManager& buffers);
 };
 
@@ -221,38 +244,30 @@ bool SampleCenterPoint::infer()
         return false;
     }
 
-    // Read the input data into the managed buffers
-    // assert(mParams.inputTensorNames.size() == 2);
-
-
     float* hostPillars = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     int32_t* hostIndex = static_cast<int32_t*>(buffers.getHostBuffer(mParams.inputTensorNames[1]));    
     
     void* inputPointBuf = nullptr;
 
-    std::string pointFilePath("../"+mParams.dataDirs[0]+"points.bin");
-    int pointNum = 0;
+    std::vector<std::string> filePath = glob("../"+mParams.dataDirs[0]+"/points/*.bin");
     
-    if (!processInput(inputPointBuf, pointFilePath, pointNum))
-    {
-        return false;
-    }
+    for(auto idx = 0; idx < filePath.size(); idx++){
+        std::cout << "filePath[idx]: " << filePath[idx] << std::endl;
+        int pointNum = 0;
+        if (!processInput(inputPointBuf, filePath[idx], pointNum))
+        {
+            return false;
+        }
+        
+        float* points = static_cast<float*>(inputPointBuf);
     
-    float* points = static_cast<float*>(inputPointBuf);
-    
-    double totalPreprocessDuration = 0;
-    double totalInferenceDuration = 0;
+        std::vector<Box> predResult;
 
-    int runTimes = 10;
-
-    for(int idx=0; idx < runTimes; idx++){
-        sample::gLogInfo << "----Run Times: "<< idx <<  " -------"<< std::endl; 
         auto startTime = std::chrono::high_resolution_clock::now();
         preprocess(points, hostPillars, hostIndex, pointNum);
         auto endTime = std::chrono::high_resolution_clock::now();
         double preprocessDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
-        totalPreprocessDuration += preprocessDuration;
-
+        
         startTime = std::chrono::high_resolution_clock::now();
         // Memcpy from host input buffers to device input buffers
         buffers.copyInputToDevice();
@@ -262,52 +277,56 @@ bool SampleCenterPoint::infer()
         {
             return false;
         }
-  
+
         // Memcpy from device output buffers to host output buffers
         buffers.copyOutputToHost();
         endTime = std::chrono::high_resolution_clock::now();
         
         double inferenceDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
-        totalInferenceDuration += inferenceDuration;
+        
+        startTime = std::chrono::high_resolution_clock::now();
+        predResult.clear();
+        postprocess(buffers, predResult);
+        endTime = std::chrono::high_resolution_clock::now();
+        double PostProcessDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(endTime - startTime).count()/1000000.0;
+        
         sample::gLogInfo << "PreProcess Time: " << preprocessDuration << " ms"<< std::endl;
         sample::gLogInfo << "inferenceDuration Time: " << inferenceDuration << " ms"<< std::endl;
+        sample::gLogInfo << "PostProcessDuration Time: " << PostProcessDuration << " ms"<< std::endl;
 
+        saveOutput(predResult, filePath[idx]);
+
+        free(points);  
     }
-    sample::gLogInfo << "Average PreProcess Time: " << totalPreprocessDuration / runTimes << " ms"<< std::endl;
-    sample::gLogInfo << "Average Inference Time: " << totalInferenceDuration / runTimes << " ms"<< std::endl;
     
-    saveOutput(buffers);
-    free(points);  
     return true;
 }
 
 /* There is a bug. 
  * If I change void to bool, the "for (size_t idx = 0; idx < mEngine->getNbBindings(); idx++)" loop will not stop.
  */
-void SampleCenterPoint::saveOutput(const samplesCommon::BufferManager& buffers)
+void SampleCenterPoint::saveOutput(std::vector<Box>& predResult, std::string& inputFileName)
 {
-    for (size_t idx = 0; idx < mEngine->getNbBindings(); idx++){
+    
+    std::string::size_type pos = inputFileName.find_last_of("/");
+    std::string outputFilePath("../"+mParams.dataDirs[0]+"/results/"+ inputFileName.substr(pos) + ".txt");
 
-        if(mEngine->bindingIsInput(idx)){
-            continue;
+    ofstream resultFile;
+
+    resultFile.exceptions ( std::ifstream::failbit | std::ifstream::badbit );
+    try {
+
+        resultFile.open(outputFilePath);
+        for (size_t idx = 0; idx < predResult.size(); idx++){
+                resultFile << predResult[idx].x << " " << predResult[idx].y << " " << predResult[idx].z << " "<< \
+                predResult[idx].l << " " << predResult[idx].h << " " << predResult[idx].w << " " << predResult[idx].velX \
+                << " " << predResult[idx].velY << " " << predResult[idx].theta << " " << predResult[idx].score << \ 
+                " "<< predResult[idx].cls << std::endl;
         }
-        auto tensorName = mEngine->getBindingName(idx);
-        auto outputSizeN= mEngine->getBindingDimensions(idx).d[0];
-        auto outputSizeC= mEngine->getBindingDimensions(idx).d[1];
-        auto outputSizeH= mEngine->getBindingDimensions(idx).d[2];
-        auto outputSizeW= mEngine->getBindingDimensions(idx).d[3];
-   
-        float* output = static_cast<float*>(buffers.getHostBuffer(tensorName));
-
-        fstream file("../"+mParams.dataDirs[0]+ tensorName, ios::out | ios::binary);
-        if (!file)
-        {
-            sample::gLogError << "Error opening file." << "../"+mParams.dataDirs[0]+ tensorName << std::endl;;
-            return;
-        }
-        file.write(reinterpret_cast<char *>(output), outputSizeN*outputSizeC*outputSizeH*outputSizeW*sizeof(float));
-        file.close ();
-
+        resultFile.close();
+    }
+    catch (std::ifstream::failure e) {
+        sample::gLogError << "Open File: " << outputFilePath << " Falied"<< std::endl;
     }
 }
 

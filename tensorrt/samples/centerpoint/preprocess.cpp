@@ -4,23 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <vector>
-
 #include "logger.h"
-
-#define BEV_W 512
-#define BEV_H 512
-#define MAX_PILLARS 30000
-#define MAX_PIONT_IN_PILLARS 20
-#define FEATURE_NUM 10
-#define X_STEP 0.2f
-#define Y_STEP 0.2f
-#define X_MIN -51.2
-#define X_MAX 51.2f
-#define Y_MIN -51.2
-#define Y_MAX 51.2f
-#define Z_MIN -5.0f
-#define Z_MAX 3.0f
-#define THREAD_NUM 2
 
 void PreprocessWorker(float* points, float* feature, int* indices, int pointNum, int threadIdx, int pillarsPerThread){
     // 0 ~ MAX_PIONT_IN_PILLARS
@@ -33,7 +17,7 @@ void PreprocessWorker(float* points, float* feature, int* indices, int pointNum,
     }
     int pillarCount = threadIdx*pillarsPerThread;
 
-    for(size_t idx = 0; idx < pointNum; idx++){
+    for(int idx = 0; idx < pointNum; idx++){
         
         auto x = points[idx*5];
         auto y = points[idx*5+1];
@@ -78,13 +62,13 @@ void PreprocessWorker(float* points, float* feature, int* indices, int pointNum,
         
     }
     
-    for(size_t pillarIdx = threadIdx*pillarsPerThread; pillarIdx < (threadIdx+1)*pillarsPerThread; pillarIdx++)
+    for(int pillarIdx = threadIdx*pillarsPerThread; pillarIdx < (threadIdx+1)*pillarsPerThread; pillarIdx++)
     {
         float xCenter = 0;
         float yCenter = 0;
         float zCenter = 0;
         auto pointNum = pointCount[pillarIdx];
-        for(size_t pointIdx=0; pointIdx < pointNum; pointIdx++)
+        for(int pointIdx=0; pointIdx < pointNum; pointIdx++)
         {
             auto x = feature[                                     pillarIdx*MAX_PIONT_IN_PILLARS + pointIdx];
             auto y = feature[1*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarIdx*MAX_PIONT_IN_PILLARS + pointIdx];
@@ -97,7 +81,7 @@ void PreprocessWorker(float* points, float* feature, int* indices, int pointNum,
         yCenter = yCenter / pointNum;
         zCenter = zCenter / pointNum;
         
-        for(size_t pointIdx=0; pointIdx < pointNum; pointIdx++)
+        for(int pointIdx=0; pointIdx < pointNum; pointIdx++)
         {    
             auto x = feature[                                     pillarIdx*MAX_PIONT_IN_PILLARS + pointIdx];
             auto y = feature[1*MAX_PILLARS*MAX_PIONT_IN_PILLARS + pillarIdx*MAX_PIONT_IN_PILLARS + pointIdx];
@@ -114,15 +98,15 @@ void PreprocessWorker(float* points, float* feature, int* indices, int pointNum,
 
 void preprocess(float* points, float* feature, int* indices, int pointNum)
 {
-    for(auto idx=0; idx< MAX_PILLARS*2; idx++){
+    for(int idx=0; idx< MAX_PILLARS*2; idx++){
         indices[idx] = -1;
     }
-    for(auto idx=0; idx< MAX_PILLARS*FEATURE_NUM*MAX_PIONT_IN_PILLARS; idx++){
+    for(int idx=0; idx< MAX_PILLARS*FEATURE_NUM*MAX_PIONT_IN_PILLARS; idx++){
         feature[idx] = 0;
     }
 
     std::vector<std::thread> threadPool;
-    for(auto idx=0; idx < THREAD_NUM; idx++){
+    for(int idx=0; idx < THREAD_NUM; idx++){
         std::thread worker(PreprocessWorker,
                                              points,
                                              feature,
