@@ -117,15 +117,15 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
 
 - step 3. Export pfe.onnx and rpn.onnx
   ```shell
-  python tool/export_pointpillars_onnx.py
+  python tools/export_pointpillars_onnx.py
   ```
 - step 4. Use onnx-simplify and scripte to simplify pfe.onnx and rpn.onnx. 
   ```shell
-  python tool/simplify_model.py
+  python tools/simplify_model.py
   ```
 - step 5. Merge pfe.onnx and rpn.onnx. We use ScatterND node to connect pfe and rpn. TensorRT doesn't support ScatterND operater. If you want to run CenterPoint-pointpillars by TensorRT, you can run pfe.onnx and rpn.onnx respectively. 
   ```shell
-  python tool/merge_pfe_rpn_model.py
+  python tools/merge_pfe_rpn_model.py
   ```
   All onnx model are saved in [onnx_model](onnx_model).
   
