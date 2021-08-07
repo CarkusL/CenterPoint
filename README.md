@@ -168,6 +168,8 @@ Compare the [TensorRT result](./demo/trt_demo/file00.png) with [Pytorch result](
 | ![avatar](./demo/trt_demo/file00.png)  | ![avatar](./demo/torch_demo/file00.png) |
 
 #### 3D detection on nuScenes Mini dataset
+TensorRT postprocess use aligned NMS on Bev, so there are some precision loss.
+
 |         |  mAP    | mATE   | mASE   | mAOE    | mAVE   |  mAAE | NDS    |
 |---------|---------|--------|--------|---------|--------|-------|------- |
 | Pytorch | 0.4163  | 0.4438 | 0.4516 | 0.5674  | 0.4429 | 0.3288| 0.4847 |
