@@ -112,7 +112,7 @@ I divide Pointpillars model into two parts, pfe(include PillarFeatureNet) and rp
   ```shell
   pip install onnx onnx-simplifier onnxruntime
   ```
-- step 1. Download the [trained model(latest.pth)](https://drive.google.com/drive/folders/1K_wHrBo6yRSG7H7UUjKI4rPnyEA8HvOp) and nuscenes mini dataset(v1.0-mini.tar)
+- step 1. Download the [trained model(latest.pth)](https://drive.google.com/drive/folders/1f8EHYqfHtP6kyNDlsTIG9Nbz_pJ0Cal9?usp=sharing) and nuscenes mini dataset(v1.0-mini.tar)
 - step 2 Prepare dataset. Please refer to [docs/NUSC.md](docs/NUSC.md)
 
 - step 3. Export pfe.onnx and rpn.onnx
