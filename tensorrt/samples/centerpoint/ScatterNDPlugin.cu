@@ -1,102 +1,95 @@
-/**
- * For the usage of those member function, please refer to the
- * offical api doc.
- * https://docs.nvidia.com/deeplearning/tensorrt/api/c_api/classnvinfer1_1_1_i_plugin_v2_ext.html
- */
+// see doc: https://developer.nvidia.com/docs/drive/drive-os/6.0.9.1/public/drive-os-tensorrt/api-reference/docs/cpp/classnvinfer1_1_1_i_plugin_v2.html#a6a9cd7a410494f90b527a413adc84ce4
+
+#include <iostream> // For std::cerr and std::endl
 
 #include "ScatterNDPlugin.h"
 #include <cassert>
-#include <iostream>
-#include <string.h>
-
+#include <cstring> // for memcpy
 #include "cuda_runtime.h"
 #include "cuda_fp16.h"
 
+// Define these in your .h or .cu file
+#define SCATTERND_PLUGIN_NAME "ScatterND"
+#define SCATTERND_PLUGIN_VERSION "1"
+#define THREAD_NUM 1024  // Ensure this is set before using
 
-
-// Use fp16 mode for inference
-#define DATA_TYPE nvinfer1::DataType::kHALF
-#define THREAD_NUM 1024
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(const char*& buffer)
+namespace
 {
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
-// Helper function for serializing plugin
 template <typename T>
-void writeToBuffer(char*& buffer, const T& val)
+void write(char*& buffer, const T& val)
 {
     *reinterpret_cast<T*>(buffer) = val;
     buffer += sizeof(T);
 }
 
-using namespace nvinfer1;
-using nvinfer1::plugin::ScatterNDPlugin;
-using nvinfer1::plugin::ScatterNDSamplePluginCreator;
-
-static const char* SCATTERND_PLUGIN_VERSION{"1"};
-static const char* SCATTERND_PLUGIN_NAME{"ScatterND"};
-
-PluginFieldCollection ScatterNDSamplePluginCreator::mFC{};
-std::vector<PluginField> ScatterNDSamplePluginCreator::mPluginAttributes;
-
-
-
-ScatterNDPlugin::ScatterNDPlugin(const std::string name, const size_t outputShapeArray[], 
-                                 const size_t indexShapeArray[], const DataType type) : mLayerName(name), mDataType(type)
+template <typename T>
+void read(const char*& buffer, T& val)
 {
-    mOutputSize[0] = outputShapeArray[0];
-    mOutputSize[1] = outputShapeArray[1];
+    val = *reinterpret_cast<const T*>(buffer);
+    buffer += sizeof(T);
+}
+} // anonymous namespace
 
-    mInputIndexSize[0] = indexShapeArray[0];
-    mInputIndexSize[1] = indexShapeArray[1];
-
+template <typename T>
+T readFromBuffer(const char*& buffer) {
+    T val = *reinterpret_cast<const T*>(buffer);
+    buffer += sizeof(T);
+    return val;
 }
 
-ScatterNDPlugin::ScatterNDPlugin(const std::string name, const void* data, size_t length)
-    : mLayerName(name)
+namespace nvinfer1
 {
-    const char *d = reinterpret_cast<const char *>(data);
-    const char *a = d;
+namespace plugin
+{
+ScatterNDPlugin::ScatterNDPlugin(const std::string& name, const size_t outputShape[], const size_t inputShape[], DataType type)
+: mLayerName(name), mDataType(type)
+{
+    mOutputSize[0] = outputShape[0];
+    mOutputSize[1] = outputShape[1];
+    mInputIndexSize[0] = inputShape[0];
+    mInputIndexSize[1] = inputShape[1];
+}
 
+ScatterNDPlugin::ScatterNDPlugin(const std::string& name, const void* data, size_t length)
+: mLayerName(name)
+{
+    const char* d = reinterpret_cast<const char*>(data);
     mDataType = readFromBuffer<DataType>(d);
     mOutputSize[0] = readFromBuffer<size_t>(d);
     mOutputSize[1] = readFromBuffer<size_t>(d);
     mInputIndexSize[0] = readFromBuffer<size_t>(d);
     mInputIndexSize[1] = readFromBuffer<size_t>(d);
-
-    assert(d == a + length);
 }
 
-int ScatterNDPlugin::getNbOutputs() const
+int ScatterNDPlugin::getNbOutputs() const TRT_NOEXCEPT
 {
     return 1;
 }
 
-Dims ScatterNDPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims)
-{   
-    // scatterND data input 
-    return Dims2(inputs[0].d[0],inputs[0].d[1]);
+Dims ScatterNDPlugin::getOutputDimensions(int index, const Dims* inputs, int nbInputDims) TRT_NOEXCEPT
+{
+    assert(index == 0);
+    assert(nbInputDims == 2);
+    return Dims3(inputs[0].d[0], inputs[0].d[1], 1); // Example modification
 }
 
-int ScatterNDPlugin::initialize()
+int ScatterNDPlugin::initialize() TRT_NOEXCEPT
 {
     return 0;
 }
 
-size_t ScatterNDPlugin::getWorkspaceSize(int) const
+void ScatterNDPlugin::terminate() TRT_NOEXCEPT
+{
+}
+
+size_t ScatterNDPlugin::getWorkspaceSize(int) const TRT_NOEXCEPT
 {
     return 0;
 }
 
-DataType ScatterNDPlugin::getOutputDataType(int index, const nvinfer1::DataType* inputTypes, int nbInputs) const
-{
-    return inputTypes[2];
-}
+// DataType ScatterNDPlugin::getOutputDataType(int index, const DataType* inputTypes, int nbInputs) const noexcept override {
+//     return inputTypes[index];  // Assuming the return type is based on the input type at the same index
+// }
 
 template <typename Dtype>
 __global__ void _ScatterNDKernel(const Dtype *updata_input, const int *indicesInputPtr , Dtype* output,
@@ -113,200 +106,184 @@ __global__ void _ScatterNDKernel(const Dtype *updata_input, const int *indicesIn
     }
 }
 
-int ScatterNDPlugin::enqueue(int batchSize, const void* const* inputs, void** outputs, void*, cudaStream_t stream)
+int ScatterNDPlugin::enqueue(
+        int32_t batchSize, 
+        void const *const * inputs, 
+        void *const * outputs, 
+        void * workspace, 
+        cudaStream_t stream
+    ) TRT_NOEXCEPT
 {
     int channel_num = mOutputSize[1];
     int max_index_num = mInputIndexSize[0];
+    int totalElems = mOutputSize[0] * channel_num;
 
-    int totalElems = mOutputSize[0]*channel_num;
-    
     dim3 blockSize(THREAD_NUM);
-    dim3 gridsize(max_index_num/blockSize.x+1);
-     
-    // if you want to inference use fp32, change the DATA_TYPE
-    switch (mDataType)
-    {
+    dim3 gridsize((max_index_num + blockSize.x - 1) / blockSize.x);
+
+    switch (mDataType) {
     case nvinfer1::DataType::kFLOAT:
         cudaMemset(outputs[0], 0, totalElems * sizeof(float));
-        _ScatterNDKernel<<<gridsize, blockSize,0,stream>>>(static_cast<float const*> (inputs[2]), static_cast<int32_t const*> (inputs[1]), 
-                                                    static_cast<float *> (outputs[0]), channel_num, max_index_num);
+        _ScatterNDKernel<float><<<gridsize, blockSize, 0, stream>>>((float const*) inputs[2], (int32_t const*) inputs[1], (float*) outputs[0], channel_num, max_index_num);
         break;
-
     case nvinfer1::DataType::kHALF:
-        cudaMemset(outputs[0], 0, totalElems * sizeof(float)/2);
-        _ScatterNDKernel<<<gridsize, blockSize,0,stream>>>(static_cast<int16_t const*> (inputs[2]), static_cast<int32_t const*> (inputs[1]), 
-                                                           static_cast<int16_t *> (outputs[0]), channel_num, max_index_num);
-        
+        cudaMemset(outputs[0], 0, totalElems * sizeof(__half));
+        _ScatterNDKernel<__half><<<gridsize, blockSize, 0, stream>>>((__half const*) inputs[2], (int32_t const*) inputs[1], (__half*) outputs[0], channel_num, max_index_num);
         break;
-    
     default:
-        std::cout << "[ERROR]: mDataType dones't support" << std::endl;
+        std::cerr << "[ERROR]: Unsupported data type!" << std::endl;
+        return -1;
     }
     return 0;
 }
 
-void ScatterNDPlugin::serialize(void* buffer) const
+bool ScatterNDPlugin::supportsFormatCombination(int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const TRT_NOEXCEPT
+{
+    // Ensure the tensor format is kLINEAR, which is required.
+    if (inOut[pos].format != TensorFormat::kLINEAR) {
+        return false;
+    }
+    // Check if the data type is one of the supported formats.
+    switch (inOut[pos].type) {
+        case DataType::kFLOAT:
+        case DataType::kINT32:
+        case DataType::kHALF:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void ScatterNDPlugin::serialize(void* buffer) const TRT_NOEXCEPT
 {
     char* d = static_cast<char*>(buffer);
-    char *a = d;
-    writeToBuffer<DataType>(d, mDataType);
-    writeToBuffer<size_t>(d, mOutputSize[0]);
-    writeToBuffer<size_t>(d, mOutputSize[1]);
-    writeToBuffer<size_t>(d, mInputIndexSize[0]);
-    writeToBuffer<size_t>(d, mInputIndexSize[1]);
-
-    assert(d == a + getSerializationSize());
+    write(d, mDataType);
+    write(d, mOutputSize[0]);
+    write(d, mOutputSize[1]);
+    write(d, mInputIndexSize[0]);
+    write(d, mInputIndexSize[1]);
 }
 
-void ScatterNDPlugin::terminate() {
-}
-
-size_t ScatterNDPlugin::getSerializationSize() const
+size_t ScatterNDPlugin::getSerializationSize() const TRT_NOEXCEPT
 {
-    return sizeof(DataType)+ 4*sizeof(size_t);
+    return sizeof(mDataType) + 4 * sizeof(size_t);
 }
 
-bool ScatterNDPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const
+bool ScatterNDPlugin::isOutputBroadcastAcrossBatch(int outputIndex, const bool* inputIsBroadcasted, int nbInputs) const TRT_NOEXCEPT
 {
-    return false;
+  return false;
 }
 
-bool ScatterNDPlugin::canBroadcastInputAcrossBatch(int inputIndex) const
+bool ScatterNDPlugin::canBroadcastInputAcrossBatch(int inputIndex) const TRT_NOEXCEPT
 {
-    return false;
+  return false;
 }
 
-void ScatterNDPlugin::configurePlugin(const Dims* inputDims, int nbInputs, const Dims* outputDims, int nbOutputs,
-    const DataType* inputTypes, const DataType* outputTypes, const bool* inputIsBroadcast,
-    const bool* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize)
-{
-    mOutputSize[0] = outputDims[0].d[0];
-    mOutputSize[1] = outputDims[0].d[1];
-    mInputIndexSize[0] = inputDims[1].d[0];
-    mInputIndexSize[1] = inputDims[1].d[1];
-}
-
-bool ScatterNDPlugin::supportsFormat(DataType type, PluginFormat format) const
-{
-    switch (type)
-    {   
-        case nvinfer1::DataType::kINT32: return true;
-        case nvinfer1::DataType::kFLOAT: return true;
-        case nvinfer1::DataType::kHALF: return true;
+void ScatterNDPlugin::configurePlugin(const PluginTensorDesc* in, int32_t nbInput, const PluginTensorDesc* out, int32_t nbOutput) noexcept {
+    // Check the number of inputs and outputs first to avoid accessing out of bounds
+    if (nbInput > 1 && nbOutput > 0) {
+        // Configure internal buffer sizes based on the input and output tensor dimensions
+        mOutputSize[0] = out[0].dims.d[0];
+        mOutputSize[1] = out[0].dims.d[1];
+        mInputIndexSize[0] = in[1].dims.d[0];
+        mInputIndexSize[1] = in[1].dims.d[1];
     }
-    return false;
 }
 
-/**
- * NO NEED TO MODIFY
- */
-const char* ScatterNDPlugin::getPluginType() const
+const char* ScatterNDPlugin::getPluginType() const TRT_NOEXCEPT
 {
     return SCATTERND_PLUGIN_NAME;
 }
 
-/**
- * NO NEED TO MODIFY
- */
-const char* ScatterNDPlugin::getPluginVersion() const
+const char* ScatterNDPlugin::getPluginVersion() const TRT_NOEXCEPT
 {
     return SCATTERND_PLUGIN_VERSION;
 }
 
-void ScatterNDPlugin::destroy()
+void ScatterNDPlugin::destroy() TRT_NOEXCEPT
 {
     delete this;
 }
 
-IPluginV2Ext* ScatterNDPlugin::clone() const
-{
-    auto* plugin = new ScatterNDPlugin(mLayerName, mOutputSize, mInputIndexSize, mDataType);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+IPluginV2Ext* ScatterNDPlugin::clone() const TRT_NOEXCEPT {
+    ScatterNDPlugin* clonedPlugin = new ScatterNDPlugin(mLayerName, mOutputSize, mInputIndexSize, mDataType);
+    clonedPlugin->setPluginNamespace(mNamespace.c_str());
+    return clonedPlugin;  // Cast is not needed if ScatterNDPlugin is derived from IPluginV2Ext
 }
 
-/**
- * NO NEED TO MODIFY
- */
-void ScatterNDPlugin::setPluginNamespace(const char* libNamespace)
+void ScatterNDPlugin::setPluginNamespace(const char* libNamespace) TRT_NOEXCEPT
 {
     mNamespace = libNamespace;
 }
 
-/**
- * NO NEED TO MODIFY
- */
-const char* ScatterNDPlugin::getPluginNamespace() const
+const char* ScatterNDPlugin::getPluginNamespace() const TRT_NOEXCEPT
 {
     return mNamespace.c_str();
 }
 
 ScatterNDSamplePluginCreator::ScatterNDSamplePluginCreator()
-{   
-    mPluginAttributes.emplace_back(PluginField("output_shape", nullptr, PluginFieldType::kINT32, 3));
-    mPluginAttributes.emplace_back(PluginField("index_shape", nullptr, PluginFieldType::kINT32, 3));
-
+{
+    mPluginAttributes.emplace_back(PluginField("output_shape", nullptr, PluginFieldType::kINT32, 2));
+    mPluginAttributes.emplace_back(PluginField("index_shape", nullptr, PluginFieldType::kINT32, 2));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }
 
-/**
- * NO NEED TO MODIFY
- */
-const char* ScatterNDSamplePluginCreator::getPluginName() const
+const char* ScatterNDSamplePluginCreator::getPluginName() const TRT_NOEXCEPT
 {
     return SCATTERND_PLUGIN_NAME;
 }
 
-/**
- * NO NEED TO MODIFY
- */
-const char* ScatterNDSamplePluginCreator::getPluginVersion() const
+const char* ScatterNDSamplePluginCreator::getPluginVersion() const TRT_NOEXCEPT
 {
     return SCATTERND_PLUGIN_VERSION;
 }
 
-/**
- * NO NEED TO MODIFY
- */
-const PluginFieldCollection* ScatterNDSamplePluginCreator::getFieldNames()
-{   
+const PluginFieldCollection* ScatterNDSamplePluginCreator::getFieldNames() TRT_NOEXCEPT
+{
     return &mFC;
 }
 
-IPluginV2Ext* ScatterNDSamplePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2Ext* ScatterNDSamplePluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc) TRT_NOEXCEPT
 {
-    
-    const nvinfer1::PluginField* fields = fc->fields;
-    
-    mDataType = DATA_TYPE;
+    const PluginField* fields = fc->fields;
+    size_t outputShapeArray[2] = {0, 0};
+    size_t indexShapeArray[2] = {0, 0};
+    DataType dataType = DataType::kFLOAT;  // Default data type
 
-    size_t indexShapeArray[2] = {0};
-    size_t outputShapeArray[2] = {0};
-
-    for (int i=0; i<fc->nbFields; i++) {
-        if(!strcmp(fields[i].name, "output_shape")){
-            const auto *outputShapeAttr = static_cast<const int32_t*>(fields[i].data);
-            outputShapeArray[0] = outputShapeAttr[1];
-            outputShapeArray[1] = outputShapeAttr[2];
-
+    for (int i = 0; i < fc->nbFields; i++)
+    {
+        std::string fieldName(fields[i].name);
+        if (fieldName == "output_shape")
+        {
+            const int32_t* shape = static_cast<const int32_t*>(fields[i].data);
+            outputShapeArray[0] = shape[0];
+            outputShapeArray[1] = shape[1];
         }
-        if(!strcmp(fields[i].name, "index_shape")){
-            const auto * indexShapeAttr = static_cast<const int32_t*>(fields[i].data);
-
-            indexShapeArray[0] = indexShapeAttr[1];
-            indexShapeArray[1] = indexShapeAttr[2];
+        else if (fieldName == "index_shape")
+        {
+            const int32_t* shape = static_cast<const int32_t*>(fields[i].data);
+            indexShapeArray[0] = shape[0];
+            indexShapeArray[1] = shape[1];
         }
     }
-    
-    auto* plugin = new ScatterNDPlugin(name, outputShapeArray, indexShapeArray, mDataType);
+
+    ScatterNDPlugin* plugin = new ScatterNDPlugin(name, outputShapeArray, indexShapeArray, dataType);
     plugin->setPluginNamespace(mNamespace.c_str());
     return plugin;
 }
 
-IPluginV2Ext* ScatterNDSamplePluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
-{   
-    return new ScatterNDPlugin(name, serialData, serialLength);
+void ScatterNDSamplePluginCreator::setPluginNamespace(const char* libNamespace) TRT_NOEXCEPT
+{
+    mNamespace = libNamespace;
+}
+
+const char* ScatterNDSamplePluginCreator::getPluginNamespace() const TRT_NOEXCEPT
+{
+    return mNamespace.c_str();
 }
 
 REGISTER_TENSORRT_PLUGIN(ScatterNDSamplePluginCreator);
+
+} // namespace plugin
+} // namespace nvinfer1

@@ -134,39 +134,69 @@ private:
 //!
 bool SampleCenterPoint::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
-    if (!builder)
-    {
+    // // auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    // // if (!builder)
+    // // {
+    // //     return false;
+    // // }
+    // // auto builder = nvinfer1::createInferBuilder(gLogger);
+    // auto builder = nvinfer1::createInferBuilder(sample::gLogger);
+    // if (!builder)
+    // {
+    //     return false;
+    // }
+
+    // // const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    // const auto explicitBatch = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    // // auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
+    // 
+    // // if (!network)
+    // // {
+    // //     return false;
+    // // }
+    // //auto network = builder->createNetworkV2(1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH));
+    // auto network = builder->createNetworkV2(0U);
+    // if (!network) {
+    // 	std::cerr << "Failed to create network." << std::endl;
+    // 	return false;
+    //     }
+
+    // auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    // if (!config)
+    // {
+    //     return false;
+    // }
+
+    // auto parser
+    //     = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+    // if (!parser)
+    // {
+    //     return false;
+    // }
+
+    // 
+    // auto constructed = constructNetwork(builder, network, config, parser);
+    // if (!constructed)
+    // {
+    //     return false;
+    // }
+    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger), samplesCommon::InferDeleter());
+    if (!builder) {
+        std::cerr << "Failed to create builder." << std::endl;
         return false;
     }
-
-    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
-    if (!network)
-    {
+    
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0U), samplesCommon::InferDeleter());
+    if (!network) {
+        std::cerr << "Failed to create network." << std::endl;
         return false;
     }
-
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
-    if (!config)
-    {
-        return false;
-    }
-
-    auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
-    if (!parser)
-    {
-        return false;
-    }
-
+    
+    // Assuming config and parser are created similarly
+    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig(), samplesCommon::InferDeleter());
+    auto parser = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger), samplesCommon::InferDeleter());
     
     auto constructed = constructNetwork(builder, network, config, parser);
-    if (!constructed)
-    {
-        return false;
-    }
-
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
         builder->buildEngineWithConfig(*network, *config), samplesCommon::InferDeleter());
     if (!mEngine)
@@ -207,10 +237,10 @@ bool SampleCenterPoint::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
         return false;
     }
 
-    config->setMaxWorkspaceSize(1_GiB);
+    config->setMaxWorkspaceSize(1 * (1 << 30));
     if (mParams.fp16)
     {
-        config->setFlag(BuilderFlag::kFP16);
+        config->setFlag(nvinfer1::BuilderFlag::kFP16);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
@@ -225,6 +255,7 @@ bool SampleCenterPoint::testFun(const samplesCommon::BufferManager& buffers){
         sample::gLogInfo << "num:" << num << std::endl;
         sample::gLogInfo << "compare :" << (num>idx) << std::endl;
     }
+	return true;  
 
 }
 //!
@@ -311,7 +342,7 @@ void SampleCenterPoint::saveOutput(std::vector<Box>& predResult, std::string& in
     std::string::size_type pos = inputFileName.find_last_of("/");
     std::string outputFilePath("../"+mParams.dataDirs[0]+"/results/"+ inputFileName.substr(pos) + ".txt");
 
-    ofstream resultFile;
+    std::ofstream resultFile;
 
     resultFile.exceptions ( std::ifstream::failbit | std::ifstream::badbit );
     try {
@@ -320,12 +351,12 @@ void SampleCenterPoint::saveOutput(std::vector<Box>& predResult, std::string& in
         for (size_t idx = 0; idx < predResult.size(); idx++){
                 resultFile << predResult[idx].x << " " << predResult[idx].y << " " << predResult[idx].z << " "<< \
                 predResult[idx].l << " " << predResult[idx].h << " " << predResult[idx].w << " " << predResult[idx].velX \
-                << " " << predResult[idx].velY << " " << predResult[idx].theta << " " << predResult[idx].score << \ 
+                << " " << predResult[idx].velY << " " << predResult[idx].theta << " " << predResult[idx].score << \
                 " "<< predResult[idx].cls << std::endl;
         }
         resultFile.close();
     }
-    catch (std::ifstream::failure e) {
+    catch (const std::ios_base::failure& e) {
         sample::gLogError << "Open File: " << outputFilePath << " Falied"<< std::endl;
     }
 }
